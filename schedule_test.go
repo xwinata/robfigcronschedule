@@ -379,8 +379,9 @@ func TestSchedule_DisabledSchedule(t *testing.T) {
 }
 
 func TestSchedule_StartDateFuture(t *testing.T) {
+	dubaiLoc, _ := time.LoadLocation("Asia/Dubai")
 	futureDate := time.Date(2025, 3, 15, 14, 30, 0, 0, time.Local)
-	now := time.Date(2025, 3, 14, 10, 0, 0, 0, time.Local)
+	now := time.Date(2025, 3, 14, 10, 0, 0, 0, dubaiLoc)
 
 	schedule, err := New(5, Second,
 		SetStartDate(futureDate),
@@ -393,7 +394,7 @@ func TestSchedule_StartDateFuture(t *testing.T) {
 	// Should return start date + start time
 	expectedTime := time.Date(
 		futureDate.Year(), futureDate.Month(), futureDate.Day(),
-		9, 0, 0, 0, now.Location(),
+		6, 0, 0, 0, dubaiLoc,
 	)
 	assert.Equal(t, expectedTime, next)
 }
