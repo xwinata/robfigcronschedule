@@ -47,10 +47,7 @@ import (
 
 func main() {
     // Create a schedule that runs every 30 minutes
-    schedule, err := rcs.New(
-        rcs.SetInterval(30),
-        rcs.SetIntervalTimeUnit(rcs.Minute),
-    )
+    schedule, err := rcs.New(30, rcs.Minute)
     if err != nil {
         log.Fatal(err)
     }
@@ -75,41 +72,28 @@ func main() {
 
 ```go
 // Every 5 minutes
-schedule, _ := rcs.New(
-    rcs.SetInterval(5),
-    rcs.SetIntervalTimeUnit(rcs.Minute),
-)
+schedule, _ := rcs.New(5, rcs.Minute)
 
 // Every 2 hours
-schedule, _ := rcs.New(
-    rcs.SetInterval(2),
-    rcs.SetIntervalTimeUnit(rcs.Hour),
-)
+schedule, _ := rcs.New(2, rcs.Hour)
 
 // Every day
-schedule, _ := rcs.New(
-    rcs.SetInterval(1),
-    rcs.SetIntervalTimeUnit(rcs.Day),
-)
+schedule, _ := rcs.New(1, rcs.Day)
 ```
 
 ### Time Window Configuration
 
 ```go
 // Run only during business hours (9 AM - 5 PM)
-schedule, _ := rcs.New(
+schedule, _ := rcs.New(30, rcs.Minute,
     rcs.SetStartTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC)),
     rcs.SetEndTime(time.Date(0, 0, 0, 17, 0, 0, 0, time.UTC)),
-    rcs.SetInterval(30),
-    rcs.SetIntervalTimeUnit(rcs.Minute),
 )
 
 // Run from 10 PM until end of day
-schedule, _ := rcs.New(
+schedule, _ := rcs.New(1, rcs.Hour,
     rcs.SetStartTime(time.Date(0, 0, 0, 22, 0, 0, 0, time.UTC)),
     // endTime defaults to 23:59:59 if not set
-    rcs.SetInterval(1),
-    rcs.SetIntervalTimeUnit(rcs.Hour),
 )
 ```
 
@@ -205,12 +189,10 @@ schedule, _ := rcs.New(
 ### 1. Business Hours Data Processing
 
 ```go
-// Process data every 15 minutes during business hours, Monday-Friday
-schedule, err := rcs.New(
+// Process data every 15 minutes during business hours, Monday-Friday  
+schedule, err := rcs.New(15, rcs.Minute,
     rcs.SetStartTime(time.Date(0, 0, 0, 8, 30, 0, 0, time.Local)),
     rcs.SetEndTime(time.Date(0, 0, 0, 17, 30, 0, 0, time.Local)),
-    rcs.SetInterval(15),
-    rcs.SetIntervalTimeUnit(rcs.Minute),
     rcs.SetAfterNextFunc(func(next *time.Time) {
         log.Printf("Next data processing scheduled for: %v", next)
     }),
@@ -225,9 +207,7 @@ c.Start()
 
 ```go
 // Run maintenance every Sunday at 2 AM
-schedule, err := rcs.New(
-    rcs.SetInterval(7), // Every 7 days
-    rcs.SetIntervalTimeUnit(rcs.Day),
+schedule, err := rcs.New(7, rcs.Day, // Every 7 days
     rcs.SetStartTime(time.Date(0, 0, 0, 2, 0, 0, 0, time.UTC)),
     rcs.SetBeforeNextFunc(func() {
         log.Println("Preparing for maintenance...")
@@ -350,10 +330,7 @@ c.Start()
 
 ```go
 // Create an initial schedule
-schedule, err := rcs.New(
-    rcs.SetInterval(30),
-    rcs.SetIntervalTimeUnit(rcs.Minute),
-)
+schedule, err := rcs.New(30, rcs.Minute)
 if err != nil {
     log.Fatal(err)
 }
@@ -363,16 +340,12 @@ c := cron.New()
 entryID := c.Schedule(schedule, cron.FuncJob(myJob))
 c.Start()
 
-// Later, update the schedule configuration
+// Later, update the schedule configuration  
 err = schedule.Set(
     rcs.SetInterval(15), // Change to every 15 minutes
     rcs.SetStartTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.Local)),
     rcs.EnablePrecision(),
 )
-if err != nil {
-    log.Printf("Failed to update schedule: %v", err)
-    // Schedule remains unchanged on error
-}
 
 // The updated schedule will take effect on the next execution
 ```
@@ -421,17 +394,15 @@ const (
 ### Constructor
 
 ```go
-func New(opts ...scheduleOption) (*Schedule, error)
+func New(interval int, intervalTimeUnit IntervalTimeUnit, opts ...scheduleOption) (*Schedule, error)
 ```
 
 ### Configuration Options
 
 ```go
 func SetStartTime(t time.Time) scheduleOption
-func SetEndTime(t time.Time) scheduleOption
+func SetEndTime(t time.Time) scheduleOption  
 func SetStartDate(t time.Time) scheduleOption
-func SetInterval(i int) scheduleOption
-func SetIntervalTimeUnit(i IntervalTimeUnit) scheduleOption
 func SetAllowedWeekdays(weekdays ...time.Weekday) scheduleOption
 func SetBeforeNextFunc(f func()) scheduleOption
 func SetAfterNextFunc(f func(next *time.Time)) scheduleOption
@@ -439,6 +410,10 @@ func Enable() scheduleOption
 func Disable() scheduleOption
 func EnablePrecision() scheduleOption  // Default
 func DisablePrecision() scheduleOption
+
+// Set() method updates only:
+func SetInterval(i int) scheduleOption         // For updating existing schedules
+func SetIntervalTimeUnit(i IntervalTimeUnit) scheduleOption  // For updating existing schedules
 ```
 
 ### Methods
@@ -453,19 +428,20 @@ func (s *Schedule) Set(opts ...scheduleOption) error
 The library provides comprehensive validation with clear error messages:
 
 ```go
-// Invalid interval
-schedule, err := rcs.New(rcs.SetInterval(-5))
+// Invalid interval - now caught at construction
+schedule, err := rcs.New(-5, rcs.Minute) // Invalid: negative interval  
 if err != nil {
-    // err: "invalid interval. interval cannot be less than 1"
+    fmt.Printf("Configuration error: %v\n", err)
+    // Output: Configuration error: invalid interval. interval cannot be less than 1
 }
 
 // Invalid time window
-schedule, err := rcs.New(
+schedule, err := rcs.New(30, rcs.Minute,
     rcs.SetStartTime(time.Date(0, 0, 0, 10, 0, 0, 0, time.UTC)),
     rcs.SetEndTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC)),
 )
 if err != nil {
-    // err: "invalid time window. start time must be before end time"
+    // err: "invalid time window. start time must be before end time"  
 }
 
 // Multi-interval with weekdays

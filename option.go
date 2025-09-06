@@ -49,7 +49,7 @@ func SetAllowedWeekdays(weekdays ...time.Weekday) scheduleOption {
 	}
 }
 
-// SetInterval sets how often the schedule should run.
+// SetInterval override how often the schedule should run.
 // Must be >= 1. Use with SetIntervalTimeUnit to specify the unit.
 //
 // Examples:
@@ -62,7 +62,7 @@ func SetInterval(i int) scheduleOption {
 	}
 }
 
-// SetIntervalTimeUnit sets the time unit for intervals.
+// SetIntervalTimeUnit override the time unit for intervals.
 // Use one of: Second, Minute, Hour, Day, Week, Month, Year
 func SetIntervalTimeUnit(i IntervalTimeUnit) scheduleOption {
 	return func(s *Schedule) {

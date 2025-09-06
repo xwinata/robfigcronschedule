@@ -21,11 +21,10 @@ import (
 //
 //	// Run every 30 minutes during business hours, starting next Monday
 //	schedule := New(
+//		30, Minute,
 //	    SetStartDate(nextMonday),
 //	    SetStartTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC)),
 //	    SetEndTime(time.Date(0, 0, 0, 17, 0, 0, 0, time.UTC)),
-//	    SetInterval(30),
-//	    SetIntervalTimeUnit(Minute),
 //	    EnablePrecision(),
 //	)
 type Schedule struct {
@@ -79,51 +78,52 @@ type Schedule struct {
 //	    // Schedule unchanged, handle error
 //	}
 func (s *Schedule) Set(opts ...scheduleOption) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// validate using temp var
+	temp := &Schedule{
+		enabled:          s.enabled,
+		interval:         s.interval,
+		intervalTimeUnit: s.intervalTimeUnit,
+		precision:        s.precision,
+	}
 
-	original := Schedule{}
+	s.mu.RLock()
+	// Only copy pointers that exist
 	if s.startDate != nil {
 		copy := *s.startDate
-		original.startDate = &copy
+		temp.startDate = &copy
 	}
 	if s.startTime != nil {
 		copy := *s.startTime
-		original.startTime = &copy
+		temp.startTime = &copy
 	}
 	if s.endTime != nil {
 		copy := *s.endTime
-		original.endTime = &copy
+		temp.endTime = &copy
 	}
+
+	// For map, consider if we really need to back it up
 	if s.allowedWeekdays != nil {
-		copy := *s.allowedWeekdays
-		original.allowedWeekdays = &copy
+		copy := make(map[time.Weekday]bool, len(*s.allowedWeekdays))
+		for k, v := range *s.allowedWeekdays {
+			copy[k] = v
+		}
+		temp.allowedWeekdays = &copy
 	}
-	original.enabled = s.enabled
-	original.interval = s.interval
-	original.intervalTimeUnit = s.intervalTimeUnit
-	original.nextRun = s.nextRun
-	original.beforeNext = s.beforeNext
-	original.afterNext = s.afterNext
+	s.mu.RUnlock()
+
+	for _, opt := range opts {
+		opt(temp)
+	}
+
+	if err := validate(temp); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	for _, opt := range opts {
 		opt(s)
-	}
-
-	if err := validate(s); err != nil {
-		s.startDate = original.startDate
-		s.startTime = original.startTime
-		s.endTime = original.endTime
-		s.allowedWeekdays = original.allowedWeekdays
-		s.enabled = original.enabled
-		s.interval = original.interval
-		s.intervalTimeUnit = original.intervalTimeUnit
-		s.precision = original.precision
-		s.beforeNext = original.beforeNext
-		s.afterNext = original.afterNext
-		s.nextRun = original.nextRun
-
-		return err
 	}
 
 	return nil
@@ -147,21 +147,26 @@ func (s *Schedule) Set(opts ...scheduleOption) error {
 //
 // Time zones are handled by converting all times to t's location.
 func (s *Schedule) Next(t time.Time) time.Time {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
 
 	//  1. Run pre-hook
 	s.safeBeforeNext(s.beforeNext)
 
 	//  2. If the schedule is disabled, schedule the next check 5 minutes later.
 	if !s.enabled {
+		s.mu.RUnlock()
 		return t.Add(5 * time.Minute)
 	}
 
 	//  3. If nextRun is still in the future, return it directly.
 	if s.nextRun.After(t) {
+		s.mu.RUnlock()
 		return s.nextRun
 	}
+	s.mu.RUnlock()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	var next time.Time
 	//  7. Run post-hook.
@@ -171,21 +176,22 @@ func (s *Schedule) Next(t time.Time) time.Time {
 	//     - If StartTime is also set and still in the future, return StartDate+StartTime.
 	//     - Otherwise, return StartDate.
 	if s.startDate != nil && t.Before(*s.startDate) {
+		next = s.startDate.In(t.Location())
 		if s.startTime != nil {
+			localization := s.startDate.In(t.Location())
 			next = time.Date(
-				s.startDate.Year(),
-				s.startDate.Month(),
-				s.startDate.Day(),
-				s.startTime.Hour(),
-				s.startTime.Minute(),
-				s.startTime.Second(),
-				s.startTime.Nanosecond(),
+				next.Year(),
+				next.Month(),
+				next.Day(),
+				localization.Hour(),
+				localization.Minute(),
+				localization.Second(),
+				localization.Nanosecond(),
 				t.Location(),
 			)
+
 			return next
 		}
-
-		next = s.startDate.In(t.Location())
 		return next
 	}
 
@@ -193,27 +199,30 @@ func (s *Schedule) Next(t time.Time) time.Time {
 	//     - If t is before today's STime, return today's STime.
 	//     - If t is after today's ETime (or default 23:59:59), return tomorrow's STime.
 	if s.startTime != nil {
+		lStartTime := s.startTime.In(t.Location())
+
 		startTime := time.Date(
 			t.Year(),
 			t.Month(),
 			t.Day(),
-			s.startTime.Hour(),
-			s.startTime.Minute(),
-			s.startTime.Second(),
-			s.startTime.Nanosecond(),
+			lStartTime.Hour(),
+			lStartTime.Minute(),
+			lStartTime.Second(),
+			lStartTime.Nanosecond(),
 			t.Location(),
 		)
 
 		var endTime time.Time
 		if s.endTime != nil {
+			lEndTime := s.endTime.In(t.Location())
 			endTime = time.Date(
 				t.Year(),
 				t.Month(),
 				t.Day(),
-				s.endTime.Hour(),
-				s.endTime.Minute(),
-				s.endTime.Second(),
-				s.endTime.Nanosecond(),
+				lEndTime.Hour(),
+				lEndTime.Minute(),
+				lEndTime.Second(),
+				lEndTime.Nanosecond(),
 				t.Location(),
 			)
 		} else {
@@ -255,7 +264,7 @@ func (s *Schedule) Next(t time.Time) time.Time {
 
 			// If we've moved to a different day, check if it's allowed
 			if next.Day() != t.Day() {
-				next = s.findNextAllowedDay(next, false)
+				next = s.findNextAllowedDay(next, true)
 			}
 
 			return next
@@ -306,8 +315,9 @@ func validate(s *Schedule) error {
 	}
 
 	if s.startTime != nil && s.endTime != nil {
-		if s.startTime.Hour()*3600+s.startTime.Minute()*60+s.startTime.Second() >=
-			s.endTime.Hour()*3600+s.endTime.Minute()*60+s.endTime.Second() {
+		startSeconds := s.startTime.Hour()*3600 + s.startTime.Minute()*60 + s.startTime.Second()
+		endSeconds := s.endTime.Hour()*3600 + s.endTime.Minute()*60 + s.endTime.Second()
+		if startSeconds >= endSeconds {
 			return ErrInvalidTimeWindow
 		}
 	}
@@ -347,14 +357,15 @@ func (s *Schedule) findNextAllowedDay(start time.Time, preserveTime bool) time.T
 		if s.isDayAllowed(current) {
 			// If we want to preserve the original time and we have start/end times
 			if preserveTime && s.startTime != nil {
+				lStartTime := s.startTime.In(current.Location())
 				return time.Date(
 					current.Year(),
 					current.Month(),
 					current.Day(),
-					s.startTime.Hour(),
-					s.startTime.Minute(),
-					s.startTime.Second(),
-					s.startTime.Nanosecond(),
+					lStartTime.Hour(),
+					lStartTime.Minute(),
+					lStartTime.Second(),
+					lStartTime.Nanosecond(),
 					current.Location(),
 				)
 			}
@@ -363,15 +374,16 @@ func (s *Schedule) findNextAllowedDay(start time.Time, preserveTime bool) time.T
 
 		// Move to next day
 		if preserveTime && s.startTime != nil {
+			lStartTime := s.startTime.In(current.Location())
 			// Jump to start time of next day
 			current = time.Date(
 				current.Year(),
 				current.Month(),
 				current.Day()+1,
-				s.startTime.Hour(),
-				s.startTime.Minute(),
-				s.startTime.Second(),
-				s.startTime.Nanosecond(),
+				lStartTime.Hour(),
+				lStartTime.Minute(),
+				lStartTime.Second(),
+				lStartTime.Nanosecond(),
 				current.Location(),
 			)
 		} else {
