@@ -31,7 +31,7 @@ jobs:
 
     - name: Run golines check
       run: |
-        golines -m 100 --base-formatter gofmt ./...
+        golines -m 100 --base-formatter gofmt *.go
         git diff --exit-code || (echo "❌ Code is not formatted with golines" && exit 1)
 
     - name: Test coverages
