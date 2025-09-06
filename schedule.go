@@ -5,7 +5,6 @@ package robfigcronschedule
 
 import (
 	"log"
-	"sync"
 	"time"
 )
 
@@ -28,9 +27,6 @@ import (
 //	    EnablePrecision(),
 //	)
 type Schedule struct {
-	// Thread safety
-	mu sync.RWMutex
-
 	// startDate controls when the schedule becomes active (optional)
 	startDate *time.Time
 
@@ -64,7 +60,7 @@ type Schedule struct {
 	precision bool
 
 	// Hook functions called before/after Next() calculations
-	beforeNext func()
+	beforeNext func(*Schedule)
 	afterNext  func(next *time.Time)
 }
 
@@ -86,7 +82,6 @@ func (s *Schedule) Set(opts ...scheduleOption) error {
 		precision:        s.precision,
 	}
 
-	s.mu.RLock()
 	// Only copy pointers that exist
 	if s.startDate != nil {
 		copy := *s.startDate
@@ -109,7 +104,6 @@ func (s *Schedule) Set(opts ...scheduleOption) error {
 		}
 		temp.allowedWeekdays = &copy
 	}
-	s.mu.RUnlock()
 
 	for _, opt := range opts {
 		opt(temp)
@@ -118,9 +112,6 @@ func (s *Schedule) Set(opts ...scheduleOption) error {
 	if err := validate(temp); err != nil {
 		return err
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	for _, opt := range opts {
 		opt(s)
@@ -147,26 +138,18 @@ func (s *Schedule) Set(opts ...scheduleOption) error {
 //
 // Time zones are handled by converting all times to t's location.
 func (s *Schedule) Next(t time.Time) time.Time {
-	s.mu.RLock()
-
 	//  1. Run pre-hook
 	s.safeBeforeNext(s.beforeNext)
 
 	//  2. If the schedule is disabled, schedule the next check 5 minutes later.
 	if !s.enabled {
-		s.mu.RUnlock()
 		return t.Add(5 * time.Minute)
 	}
 
 	//  3. If nextRun is still in the future, return it directly.
 	if s.nextRun.After(t) {
-		s.mu.RUnlock()
 		return s.nextRun
 	}
-	s.mu.RUnlock()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	var next time.Time
 	//  7. Run post-hook.
@@ -178,7 +161,7 @@ func (s *Schedule) Next(t time.Time) time.Time {
 	if s.startDate != nil && t.Before(*s.startDate) {
 		next = s.startDate.In(t.Location())
 		if s.startTime != nil {
-			localization := s.startDate.In(t.Location())
+			localization := s.startTime.In(t.Location())
 			next = time.Date(
 				next.Year(),
 				next.Month(),
@@ -397,7 +380,7 @@ func (s *Schedule) findNextAllowedDay(start time.Time, preserveTime bool) time.T
 }
 
 // Handles beforeNext() panics
-func (s *Schedule) safeBeforeNext(beforeNext func()) {
+func (s *Schedule) safeBeforeNext(beforeNext func(*Schedule)) {
 	if beforeNext == nil {
 		return
 	}
@@ -406,7 +389,8 @@ func (s *Schedule) safeBeforeNext(beforeNext func()) {
 			log.Printf("beforeNext() panicked. %v", r)
 		}
 	}()
-	beforeNext()
+
+	beforeNext(s)
 }
 
 // Handles afterNext() panics

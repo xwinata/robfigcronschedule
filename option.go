@@ -72,7 +72,7 @@ func SetIntervalTimeUnit(i IntervalTimeUnit) scheduleOption {
 
 // SetBeforeNextFunc sets a function to call before each Next() calculation.
 // Useful for logging, metrics, or state preparation.
-func SetBeforeNextFunc(f func()) scheduleOption {
+func SetBeforeNextFunc(f func(*Schedule)) scheduleOption {
 	return func(s *Schedule) {
 		s.beforeNext = f
 	}

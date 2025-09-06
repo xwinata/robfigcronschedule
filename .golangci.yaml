@@ -1,0 +1,10 @@
+version: "2"
+
+linters:
+  enable:
+    - sloglint
+  disable:
+    - errcheck
+  settings:
+    sloglint:
+      key-naming-case: snake

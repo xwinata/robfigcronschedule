@@ -25,6 +25,10 @@ A flexible and powerful scheduling library that extends the [robfig/cron](https:
 - Timezone handling (set on cron instance)
 - Traditional cron-like scheduling
 
+## Design Philosophy
+
+This library is designed for **one schedule per cron job**. Each schedule instance should be used with a single cron job entry. For multiple scheduling patterns, create separate schedule instances.
+
 ## Installation
 
 ```bash
@@ -86,13 +90,13 @@ schedule, _ := rcs.New(1, rcs.Day)
 ```go
 // Run only during business hours (9 AM - 5 PM)
 schedule, _ := rcs.New(30, rcs.Minute,
-    rcs.SetStartTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC)),
-    rcs.SetEndTime(time.Date(0, 0, 0, 17, 0, 0, 0, time.UTC)),
+    rcs.SetStartTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
+    rcs.SetEndTime(time.Date(2000, 1, 1, 17, 0, 0, 0, time.UTC)),
 )
 
 // Run from 10 PM until end of day
 schedule, _ := rcs.New(1, rcs.Hour,
-    rcs.SetStartTime(time.Date(0, 0, 0, 22, 0, 0, 0, time.UTC)),
+    rcs.SetStartTime(time.Date(2000, 1, 1, 22, 0, 0, 0, time.UTC)),
     // endTime defaults to 23:59:59 if not set
 )
 ```
@@ -102,43 +106,33 @@ schedule, _ := rcs.New(1, rcs.Hour,
 ```go
 // Start the schedule next Monday
 nextMonday := getNextMonday()
-schedule, _ := rcs.New(
-    rcs.SetStartDate(nextMonday),
-    rcs.SetInterval(1),
-    rcs.SetIntervalTimeUnit(rcs.Day),
+schedule, _ := rcs.New(1, rcs.Day,
+    rcs.SetStartDate(nextMonday)
 )
 
 // Start at a specific date and time
 launchTime := time.Date(2024, 12, 25, 0, 0, 0, 0, time.UTC)
-schedule, _ := rcs.New(
+schedule, _ := rcs.New(4, rcs.Hour,
     rcs.SetStartDate(launchTime),
-    rcs.SetStartTime(time.Date(0, 0, 0, 8, 0, 0, 0, time.UTC)),
-    rcs.SetInterval(4),
-    rcs.SetIntervalTimeUnit(rcs.Hour),
+    rcs.SetStartTime(time.Date(2000, 1, 1, 8, 0, 0, 0, time.UTC)),
 )
 ```
 ### Weekday Filtering
 
 ```go
 // Run only on weekdays (Monday-Friday)
-schedule, _ := rcs.New(
-    rcs.SetInterval(30),
-    rcs.SetIntervalTimeUnit(rcs.Minute),
+schedule, _ := rcs.New(30, rcs.Minute,
     rcs.SetAllowedWeekdays(time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday),
 )
 
 // Run only on weekends
-schedule, _ := rcs.New(
-    rcs.SetInterval(2),
-    rcs.SetIntervalTimeUnit(rcs.Hour),
+schedule, _ := rcs.New(2, rcs.Hour,
     rcs.SetAllowedWeekdays(time.Saturday, time.Sunday),
 )
 
 // Run only on specific days (e.g., Monday and Wednesday)
-schedule, _ := rcs.New(
-    rcs.SetInterval(1),
-    rcs.SetIntervalTimeUnit(rcs.Day),
-    rcs.SetStartTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC)),
+schedule, _ := rcs.New(1, rcs.Day,
+    rcs.SetStartTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
     rcs.SetAllowedWeekdays(time.Monday, time.Wednesday),
 )
 ```
@@ -154,11 +148,9 @@ Calculates intervals strictly from the current time. If the next interval falls 
 
 ```go
 // 30-minute intervals from current time
-schedule, _ := rcs.New(
-    rcs.SetStartTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC)),   // 9 AM
-    rcs.SetEndTime(time.Date(0, 0, 0, 17, 0, 0, 0, time.UTC)),    // 5 PM  
-    rcs.SetInterval(30),
-    rcs.SetIntervalTimeUnit(rcs.Minute),
+schedule, _ := rcs.New(30, rcs.Minute,
+    rcs.SetStartTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),   // 9 AM
+    rcs.SetEndTime(time.Date(2000, 1, 1, 17, 0, 0, 0, time.UTC)),    // 5 PM  
     rcs.EnablePrecision(), // Default
 )
 
@@ -172,11 +164,9 @@ Rounds up from the start time using intervals. Ensures no time slots are missed 
 
 ```go
 // Non-precision mode - rounds up from start time
-schedule, _ := rcs.New(
-    rcs.SetStartTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC)),
-    rcs.SetEndTime(time.Date(0, 0, 0, 17, 0, 0, 0, time.UTC)),
-    rcs.SetInterval(30),
-    rcs.SetIntervalTimeUnit(rcs.Minute),
+schedule, _ := rcs.New(30, rcs.Minute,
+    rcs.SetStartTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
+    rcs.SetEndTime(time.Date(2000, 1, 1, 17, 0, 0, 0, time.UTC)),
     rcs.DisablePrecision(),
 )
 
@@ -191,8 +181,8 @@ schedule, _ := rcs.New(
 ```go
 // Process data every 15 minutes during business hours, Monday-Friday  
 schedule, err := rcs.New(15, rcs.Minute,
-    rcs.SetStartTime(time.Date(0, 0, 0, 8, 30, 0, 0, time.Local)),
-    rcs.SetEndTime(time.Date(0, 0, 0, 17, 30, 0, 0, time.Local)),
+    rcs.SetStartTime(time.Date(2000, 1, 1, 8, 30, 0, 0, time.Local)),
+    rcs.SetEndTime(time.Date(2000, 1, 1, 17, 30, 0, 0, time.Local)),
     rcs.SetAfterNextFunc(func(next *time.Time) {
         log.Printf("Next data processing scheduled for: %v", next)
     }),
@@ -208,8 +198,8 @@ c.Start()
 ```go
 // Run maintenance every Sunday at 2 AM
 schedule, err := rcs.New(7, rcs.Day, // Every 7 days
-    rcs.SetStartTime(time.Date(0, 0, 0, 2, 0, 0, 0, time.UTC)),
-    rcs.SetBeforeNextFunc(func() {
+    rcs.SetStartTime(time.Date(2000, 1, 1, 2, 0, 0, 0, time.UTC)),
+    rcs.SetBeforeNextFunc(func(s *Schedule) {
         log.Println("Preparing for maintenance...")
     }),
     rcs.SetAfterNextFunc(func(next *time.Time) {
@@ -226,10 +216,8 @@ c.Start()
 
 ```go
 // Daily backups at 11 PM, weekdays only
-schedule, err := rcs.New(
-    rcs.SetInterval(1),
-    rcs.SetIntervalTimeUnit(rcs.Day),
-    rcs.SetStartTime(time.Date(0, 0, 0, 23, 0, 0, 0, time.Local)),
+schedule, err := rcs.New(1, rcs.Day,
+    rcs.SetStartTime(time.Date(2000, 1, 1, 23, 0, 0, 0, time.Local)),
     rcs.SetAllowedWeekdays(time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday),
 )
 
@@ -242,11 +230,9 @@ c.Start()
 
 ```go
 // Call external API every 30 seconds, but only during off-peak hours
-schedule, err := rcs.New(
-    rcs.SetStartTime(time.Date(0, 0, 0, 1, 0, 0, 0, time.UTC)),  // 1 AM
-    rcs.SetEndTime(time.Date(0, 0, 0, 6, 0, 0, 0, time.UTC)),    // 6 AM
-    rcs.SetInterval(30),
-    rcs.SetIntervalTimeUnit(rcs.Second),
+schedule, err := rcs.New(30, rcs.Second,
+    rcs.SetStartTime(time.Date(2000, 1, 1, 1, 0, 0, 0, time.UTC)),  // 1 AM
+    rcs.SetEndTime(time.Date(2000, 1, 1, 6, 0, 0, 0, time.UTC)),    // 6 AM
     rcs.EnablePrecision(),
 )
 
@@ -260,10 +246,8 @@ c.Start()
 ```go
 // Start a feature rollout next Monday, then run every hour
 rolloutStart := getNextMonday()
-schedule, err := rcs.New(
+schedule, err := rcs.New(1, rcs.Hour,
     rcs.SetStartDate(rolloutStart),
-    rcs.SetInterval(1),
-    rcs.SetIntervalTimeUnit(rcs.Hour),
     rcs.SetAfterNextFunc(func(next *time.Time) {
         metrics.RecordScheduledRollout(next)
     }),
@@ -278,10 +262,8 @@ c.Start()
 
 ```go
 // Health check every 5 minutes with comprehensive monitoring
-schedule, err := rcs.New(
-    rcs.SetInterval(5),
-    rcs.SetIntervalTimeUnit(rcs.Minute),
-    rcs.SetBeforeNextFunc(func() {
+schedule, err := rcs.New(5, rcs.Minute,
+    rcs.SetBeforeNextFunc(func(s *Schedule) {
         log.Println("Starting health check cycle...")
         metrics.IncrementCounter("health_checks_started")
     }),
@@ -305,19 +287,15 @@ var schedule *rcs.Schedule
 
 if isPeakSeason() {
     // Peak season: every 10 minutes during business hours
-    schedule, _ = rcs.New(
-        rcs.SetStartTime(time.Date(0, 0, 0, 8, 0, 0, 0, time.Local)),
-        rcs.SetEndTime(time.Date(0, 0, 0, 20, 0, 0, 0, time.Local)),
-        rcs.SetInterval(10),
-        rcs.SetIntervalTimeUnit(rcs.Minute),
+    schedule, _ = rcs.New(10, rcs.Minute,
+        rcs.SetStartTime(time.Date(2000, 1, 1, 8, 0, 0, 0, time.Local)),
+        rcs.SetEndTime(time.Date(2000, 1, 1, 20, 0, 0, 0, time.Local)),
     )
 } else {
     // Off-peak: every 30 minutes, extended hours
-    schedule, _ = rcs.New(
-        rcs.SetStartTime(time.Date(0, 0, 0, 6, 0, 0, 0, time.Local)),
-        rcs.SetEndTime(time.Date(0, 0, 0, 22, 0, 0, 0, time.Local)),
-        rcs.SetInterval(30),
-        rcs.SetIntervalTimeUnit(rcs.Minute),
+    schedule, _ = rcs.New(30, rcs.Minute,
+        rcs.SetStartTime(time.Date(2000, 1, 1, 6, 0, 0, 0, time.Local)),
+        rcs.SetEndTime(time.Date(2000, 1, 1, 22, 0, 0, 0, time.Local)),
     )
 }
 
@@ -329,35 +307,60 @@ c.Start()
 ## Dynamic Schedule Updates
 
 ```go
-// Create an initial schedule
-schedule, err := rcs.New(30, rcs.Minute)
-if err != nil {
-    log.Fatal(err)
+// Example: Update schedule based on database configuration
+func createDynamicSchedule() *rcs.Schedule {
+    schedule, _ := rcs.New(5, rcs.Second, // Default fallback
+        rcs.SetBeforeNextFunc(func(s *Schedule) {
+            // Query database for current configuration
+            config := fetchScheduleConfigFromDB()
+            
+            // Apply updates if configuration changed
+            var updates []rcs.ScheduleOption
+            if config.IntervalSeconds != s.GetInterval() {
+                updates = append(updates, rcs.SetInterval(config.IntervalSeconds))
+            }
+            if config.Enabled != s.IsEnabled() {
+                if config.Enabled {
+                    updates = append(updates, rcs.Enable())
+                } else {
+                    updates = append(updates, rcs.Disable())
+                }
+            }
+            
+            if len(updates) > 0 {
+                s.Set(updates...)
+            }
+        }),
+    )
+    return schedule
 }
 
-// Start the cron
-c := cron.New()
-entryID := c.Schedule(schedule, cron.FuncJob(myJob))
-c.Start()
-
-// Later, update the schedule configuration  
-err = schedule.Set(
-    rcs.SetInterval(15), // Change to every 15 minutes
-    rcs.SetStartTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.Local)),
-    rcs.EnablePrecision(),
+// Example: Feature flag integration
+schedule, _ := rcs.New(30, rcs.Minute,
+    rcs.SetBeforeNextFunc(func(s *Schedule) {
+        // Check feature flags before each execution
+        if featureFlags.IsDisabled("background_processing") {
+            s.Set(rcs.Disable())
+            return
+        }
+        
+        // Dynamic interval based on load
+        if systemLoad.IsHigh() {
+            s.Set(rcs.SetInterval(60)) // Slow down during high load
+        } else {
+            s.Set(rcs.SetInterval(30)) // Normal interval
+        }
+    }),
 )
-
-// The updated schedule will take effect on the next execution
 ```
 
 ## Error Handling and Validation
 
 ```go
 // The library provides comprehensive validation
-schedule, err := rcs.New(
-    rcs.SetInterval(-5), // Invalid: negative interval
-    rcs.SetStartTime(time.Date(0, 0, 0, 10, 0, 0, 0, time.UTC)),
-    rcs.SetEndTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC)), // Invalid: end before start
+schedule, err := rcs.New(-5, rcs.Hour, // Invalid: negative interval
+    rcs.SetStartTime(time.Date(2000, 1, 1, 10, 0, 0, 0, time.UTC)),
+    rcs.SetEndTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)), // Invalid: end before start
 )
 
 if err != nil {
@@ -437,16 +440,15 @@ if err != nil {
 
 // Invalid time window
 schedule, err := rcs.New(30, rcs.Minute,
-    rcs.SetStartTime(time.Date(0, 0, 0, 10, 0, 0, 0, time.UTC)),
-    rcs.SetEndTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC)),
+    rcs.SetStartTime(time.Date(2000, 1, 1, 10, 0, 0, 0, time.UTC)),
+    rcs.SetEndTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
 )
 if err != nil {
     // err: "invalid time window. start time must be before end time"  
 }
 
 // Multi-interval with weekdays
-schedule, err := rcs.New(
-    rcs.SetInterval(2),
+schedule, err := rcs.New(2, rcs.Hour,
     rcs.SetIntervalTimeUnit(rcs.Week),
     rcs.SetAllowedWeekdays(time.Monday),
 )
