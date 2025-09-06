@@ -1,4 +1,4 @@
-# robfig/cron Schedule Extension
+# robfig/cron Schedule Extension ![coverage](https://raw.githubusercontent.com/xwinata/robfigcronschedule/refs/heads/badges/.badges/main/coverage.svg)
 
 A flexible and powerful scheduling library that extends the [robfig/cron](https://github.com/robfig/cron) package with advanced features like time windows, start dates, precision control, and comprehensive interval options.
 
