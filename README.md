@@ -89,14 +89,17 @@ schedule, _ := rcs.New(1, rcs.Day)
 
 ```go
 // Run only during business hours (9 AM - 5 PM)
+startTime := time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)
+endTime := time.Date(2000, 1, 1, 17, 0, 0, 0, time.UTC)
 schedule, _ := rcs.New(30, rcs.Minute,
-    rcs.SetStartTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
-    rcs.SetEndTime(time.Date(2000, 1, 1, 17, 0, 0, 0, time.UTC)),
+    rcs.SetStartTime(&startTime),
+    rcs.SetEndTime(&endTime),
 )
 
 // Run from 10 PM until end of day
+startTime := time.Date(2000, 1, 1, 22, 0, 0, 0, time.UTC)
 schedule, _ := rcs.New(1, rcs.Hour,
-    rcs.SetStartTime(time.Date(2000, 1, 1, 22, 0, 0, 0, time.UTC)),
+    rcs.SetStartTime(&startTime),
     // endTime defaults to 23:59:59 if not set
 )
 ```
@@ -112,9 +115,10 @@ schedule, _ := rcs.New(1, rcs.Day,
 
 // Start at a specific date and time
 launchTime := time.Date(2024, 12, 25, 0, 0, 0, 0, time.UTC)
+startTime := time.Date(2000, 1, 1, 8, 0, 0, 0, time.UTC)
 schedule, _ := rcs.New(4, rcs.Hour,
-    rcs.SetStartDate(launchTime),
-    rcs.SetStartTime(time.Date(2000, 1, 1, 8, 0, 0, 0, time.UTC)),
+    rcs.SetStartDate(&launchTime),
+    rcs.SetStartTime(&startTime),
 )
 ```
 ### Weekday Filtering
@@ -131,12 +135,27 @@ schedule, _ := rcs.New(2, rcs.Hour,
 )
 
 // Run only on specific days (e.g., Monday and Wednesday)
+startTime := time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)
 schedule, _ := rcs.New(1, rcs.Day,
-    rcs.SetStartTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
+    rcs.SetStartTime(&startTime),
     rcs.SetAllowedWeekdays(time.Monday, time.Wednesday),
 )
 ```
 Note: Weekday filtering with multi-week/month/year intervals may produce unexpected results and will return a validation error.
+
+## Configuration Reset
+
+```go
+// Reset schedule constraints to defaults
+err := schedule.Set(
+    rcs.SetStartTime(nil),      // Remove daily time window start
+    rcs.SetEndTime(nil),        // Remove daily time window end  
+    rcs.SetStartDate(nil),      // Make schedule active immediately
+    rcs.SetBeforeNextFunc(nil), // Remove before-execution hook
+    rcs.SetAfterNextFunc(nil),  // Remove after-execution hook
+    rcs.SetAllowedWeekdays(),   // Reset to allow any day (empty arguments)
+)
+```
 
 ## Precision Mode
 
@@ -148,9 +167,11 @@ Calculates intervals strictly from the current time. If the next interval falls 
 
 ```go
 // 30-minute intervals from current time
+startTime := time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)
+endTime := time.Date(2000, 1, 1, 17, 0, 0, 0, time.UTC)
 schedule, _ := rcs.New(30, rcs.Minute,
-    rcs.SetStartTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),   // 9 AM
-    rcs.SetEndTime(time.Date(2000, 1, 1, 17, 0, 0, 0, time.UTC)),    // 5 PM  
+    rcs.SetStartTime(&startTime),   // 9 AM
+    rcs.SetEndTime(&endTime),    // 5 PM  
     rcs.EnablePrecision(), // Default
 )
 
@@ -164,9 +185,11 @@ Rounds up from the start time using intervals. Ensures no time slots are missed 
 
 ```go
 // Non-precision mode - rounds up from start time
+startTime := time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)
+endTime := time.Date(2000, 1, 1, 17, 0, 0, 0, time.UTC)
 schedule, _ := rcs.New(30, rcs.Minute,
-    rcs.SetStartTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
-    rcs.SetEndTime(time.Date(2000, 1, 1, 17, 0, 0, 0, time.UTC)),
+    rcs.SetStartTime(&startTime),
+    rcs.SetEndTime(&endTime),
     rcs.DisablePrecision(),
 )
 
@@ -180,9 +203,11 @@ schedule, _ := rcs.New(30, rcs.Minute,
 
 ```go
 // Process data every 15 minutes during business hours, Monday-Friday  
+startTime := time.Date(2000, 1, 1, 8, 30, 0, 0, time.Local)
+endTime := time.Date(2000, 1, 1, 17, 30, 0, 0, time.Local)
 schedule, err := rcs.New(15, rcs.Minute,
-    rcs.SetStartTime(time.Date(2000, 1, 1, 8, 30, 0, 0, time.Local)),
-    rcs.SetEndTime(time.Date(2000, 1, 1, 17, 30, 0, 0, time.Local)),
+    rcs.SetStartTime(&startTime),
+    rcs.SetEndTime(&endTime),
     rcs.SetAfterNextFunc(func(next *time.Time) {
         log.Printf("Next data processing scheduled for: %v", next)
     }),
@@ -197,8 +222,9 @@ c.Start()
 
 ```go
 // Run maintenance every Sunday at 2 AM
+starTime := time.Date(2000, 1, 1, 2, 0, 0, 0, time.UTC)
 schedule, err := rcs.New(7, rcs.Day, // Every 7 days
-    rcs.SetStartTime(time.Date(2000, 1, 1, 2, 0, 0, 0, time.UTC)),
+    rcs.SetStartTime(&startTime),
     rcs.SetBeforeNextFunc(func(s *Schedule) {
         log.Println("Preparing for maintenance...")
     }),
@@ -216,8 +242,9 @@ c.Start()
 
 ```go
 // Daily backups at 11 PM, weekdays only
+startTime := time.Date(2000, 1, 1, 23, 0, 0, 0, time.Local)
 schedule, err := rcs.New(1, rcs.Day,
-    rcs.SetStartTime(time.Date(2000, 1, 1, 23, 0, 0, 0, time.Local)),
+    rcs.SetStartTime(&startTime),
     rcs.SetAllowedWeekdays(time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday),
 )
 
@@ -230,9 +257,11 @@ c.Start()
 
 ```go
 // Call external API every 30 seconds, but only during off-peak hours
+startTime := time.Date(2000, 1, 1, 1, 0, 0, 0, time.UTC)
+endTime := time.Date(2000, 1, 1, 6, 0, 0, 0, time.UTC)
 schedule, err := rcs.New(30, rcs.Second,
-    rcs.SetStartTime(time.Date(2000, 1, 1, 1, 0, 0, 0, time.UTC)),  // 1 AM
-    rcs.SetEndTime(time.Date(2000, 1, 1, 6, 0, 0, 0, time.UTC)),    // 6 AM
+    rcs.SetStartTime(&startTime),  // 1 AM
+    rcs.SetEndTime(&endTime),    // 6 AM
     rcs.EnablePrecision(),
 )
 
@@ -287,15 +316,19 @@ var schedule *rcs.Schedule
 
 if isPeakSeason() {
     // Peak season: every 10 minutes during business hours
+    startTime := time.Date(2000, 1, 1, 8, 0, 0, 0, time.Local)
+    endTime := time.Date(2000, 1, 1, 20, 0, 0, 0, time.Local)
     schedule, _ = rcs.New(10, rcs.Minute,
-        rcs.SetStartTime(time.Date(2000, 1, 1, 8, 0, 0, 0, time.Local)),
-        rcs.SetEndTime(time.Date(2000, 1, 1, 20, 0, 0, 0, time.Local)),
+        rcs.SetStartTime(&startTime),
+        rcs.SetEndTime(&endTime),
     )
 } else {
     // Off-peak: every 30 minutes, extended hours
+    startTime := time.Date(2000, 1, 1, 6, 0, 0, 0, time.Local)
+    endTime := time.Date(2000, 1, 1, 22, 0, 0, 0, time.Local)
     schedule, _ = rcs.New(30, rcs.Minute,
-        rcs.SetStartTime(time.Date(2000, 1, 1, 6, 0, 0, 0, time.Local)),
-        rcs.SetEndTime(time.Date(2000, 1, 1, 22, 0, 0, 0, time.Local)),
+        rcs.SetStartTime(&startTime),
+        rcs.SetEndTime(&endTime),
     )
 }
 
@@ -358,9 +391,11 @@ schedule, _ := rcs.New(30, rcs.Minute,
 
 ```go
 // The library provides comprehensive validation
+startTime := time.Date(2000, 1, 1, 10, 0, 0, 0, time.UTC)
+endTime := time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)
 schedule, err := rcs.New(-5, rcs.Hour, // Invalid: negative interval
-    rcs.SetStartTime(time.Date(2000, 1, 1, 10, 0, 0, 0, time.UTC)),
-    rcs.SetEndTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)), // Invalid: end before start
+    rcs.SetStartTime(&startTime),
+    rcs.SetEndTime(&endTime), // Invalid: end before start
 )
 
 if err != nil {
@@ -439,9 +474,11 @@ if err != nil {
 }
 
 // Invalid time window
+startTime := time.Date(2000, 1, 1, 10, 0, 0, 0, time.UTC)
+endTime := time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)
 schedule, err := rcs.New(30, rcs.Minute,
-    rcs.SetStartTime(time.Date(2000, 1, 1, 10, 0, 0, 0, time.UTC)),
-    rcs.SetEndTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
+    rcs.SetStartTime(&startTime),
+    rcs.SetEndTime(&endTime),
 )
 if err != nil {
     // err: "invalid time window. start time must be before end time"  

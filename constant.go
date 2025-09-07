@@ -22,9 +22,6 @@ var (
 	ErrInvalidTimeWindow = errors.New(
 		"invalid time window. start time must be before end time",
 	)
-	ErrNoDayInWeekdayWindow = errors.New(
-		"if weekdays are specified, at least one day must be allowed",
-	)
 	ErrMultiIntervalWithWeekdayWindow = errors.New(
 		"multi weeks/months/years intervals with weekday restrictions may produce unexpected results",
 	)

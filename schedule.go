@@ -305,9 +305,7 @@ func validate(s *Schedule) error {
 		}
 	}
 
-	if s.allowedWeekdays != nil && len(*s.allowedWeekdays) == 0 {
-		return ErrNoDayInWeekdayWindow
-	} else if s.allowedWeekdays != nil && len(*s.allowedWeekdays) > 0 { // If using week-based or longer intervals with weekday restrictions, warn about potential issues
+	if s.allowedWeekdays != nil && len(*s.allowedWeekdays) > 0 { // If using week-based or longer intervals with weekday restrictions, warn about potential issues
 		if s.intervalTimeUnit == Week || s.intervalTimeUnit == Month || s.intervalTimeUnit == Year {
 			return ErrMultiIntervalWithWeekdayWindow
 		}

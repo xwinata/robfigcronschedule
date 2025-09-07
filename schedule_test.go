@@ -619,6 +619,16 @@ func TestSchedule_WeekdayFiltering(t *testing.T) {
 	}
 }
 
+func TestSchedule_NilTimeReset(t *testing.T) {
+	startTime := time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)
+	schedule, err := New(30, Minute, SetStartTime(&startTime))
+	require.NoError(t, err)
+
+	// Reset to nil
+	err = schedule.Set(SetStartTime(nil))
+	require.NoError(t, err)
+}
+
 // Helper functions
 func parseTime(t *testing.T, timeStr string) time.Time {
 	parsed, err := time.Parse("2006-01-02 15:04:05", timeStr)
