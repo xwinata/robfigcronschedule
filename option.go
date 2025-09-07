@@ -8,28 +8,34 @@ type ScheduleOption func(*Schedule)
 // Combined with SetEndTime, this creates a daily time window.
 // If endTime is not set, it defaults to 23:59:59.
 //
-// Example: SetStartTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC))
+// Example:
+// t := time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC)
+// SetStartTime(&t)
+//
 // creates a start time of 9:00 AM.
-func SetStartTime(t time.Time) ScheduleOption {
+// Set nil to reset.
+func SetStartTime(t *time.Time) ScheduleOption {
 	return func(s *Schedule) {
-		s.startTime = &t
+		s.startTime = t
 	}
 }
 
 // SetEndTime sets the daily end time for the schedule.
 // Must be used with SetStartTime to be meaningful.
 // The schedule will not run after this time each day.
-func SetEndTime(t time.Time) ScheduleOption {
+// Set nil to reset
+func SetEndTime(t *time.Time) ScheduleOption {
 	return func(s *Schedule) {
-		s.endTime = &t
+		s.endTime = t
 	}
 }
 
 // SetStartDate sets when the schedule should begin executing.
 // The schedule will not run before this date.
-func SetStartDate(t time.Time) ScheduleOption {
+// Set nil to reset
+func SetStartDate(t *time.Time) ScheduleOption {
 	return func(s *Schedule) {
-		s.startDate = &t
+		s.startDate = t
 	}
 }
 
@@ -39,8 +45,15 @@ func SetStartDate(t time.Time) ScheduleOption {
 // When combined with multi-day intervals (Week, Month, Year), this may produce
 // unexpected results as the schedule will skip to the next allowed day,
 // potentially disrupting the intended interval timing.
+//
+// if argument is empty, it will be reset to nil.
 func SetAllowedWeekdays(weekdays ...time.Weekday) ScheduleOption {
 	return func(s *Schedule) {
+		if len(weekdays) < 1 {
+			s.allowedWeekdays = nil
+			return
+		}
+
 		allowed := make(map[time.Weekday]bool)
 		for _, day := range weekdays {
 			allowed[day] = true

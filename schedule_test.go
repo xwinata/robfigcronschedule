@@ -9,6 +9,9 @@ import (
 )
 
 func TestNew_BasicValidation(t *testing.T) {
+	startTime := time.Date(2000, 1, 1, 10, 0, 0, 0, time.UTC)
+	endTime := time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)
+
 	tests := []struct {
 		name          string
 		interval      int
@@ -40,19 +43,20 @@ func TestNew_BasicValidation(t *testing.T) {
 			interval: 5,
 			unit:     Second,
 			opts: []ScheduleOption{
-				SetStartTime(time.Date(2000, 1, 1, 10, 0, 0, 0, time.UTC)),
-				SetEndTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
+				SetStartTime(&startTime),
+				SetEndTime(&endTime),
 			},
 			expectError: ErrInvalidTimeWindow,
 		},
 		{
-			name:     "empty weekdays restriction",
+			name:     "empty weekdays",
 			interval: 5,
 			unit:     Second,
 			opts: []ScheduleOption{
 				SetAllowedWeekdays(), // empty
 			},
-			expectError: ErrNoDayInWeekdayWindow,
+			expectEnabled: true,
+			expectError:   nil,
 		},
 		{
 			name:     "multi-week interval with weekday restriction",
@@ -112,12 +116,14 @@ func TestSchedule_BusinessHoursProcessing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			startTime := time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)
+			endTime := time.Date(2000, 1, 1, 17, 0, 0, 0, time.UTC)
 			// Real-world use case: Process data every 2 seconds during business hours
 			schedule, err := New(
 				2,
 				Second,
-				SetStartTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
-				SetEndTime(time.Date(2000, 1, 1, 17, 0, 0, 0, time.UTC)),
+				SetStartTime(&startTime),
+				SetEndTime(&endTime),
 				SetAllowedWeekdays(
 					time.Monday,
 					time.Tuesday,
@@ -139,9 +145,10 @@ func TestSchedule_BusinessHoursProcessing(t *testing.T) {
 }
 
 func TestSchedule_MaintenanceWindow(t *testing.T) {
+	startTime := time.Date(2000, 1, 1, 2, 0, 0, 0, time.UTC)
 	// Real-world use case: Daily maintenance every day at 2 AM
 	schedule, err := New(1, Day,
-		SetStartTime(time.Date(2000, 1, 1, 2, 0, 0, 0, time.UTC)),
+		SetStartTime(&startTime),
 	)
 	require.NoError(t, err)
 
@@ -382,10 +389,11 @@ func TestSchedule_StartDateFuture(t *testing.T) {
 	dubaiLoc, _ := time.LoadLocation("Asia/Dubai")
 	futureDate := time.Date(2025, 3, 15, 14, 30, 0, 0, time.Local)
 	now := time.Date(2025, 3, 14, 10, 0, 0, 0, dubaiLoc)
+	startTime := time.Date(2000, 1, 1, 2, 0, 0, 0, time.UTC)
 
 	schedule, err := New(5, Second,
-		SetStartDate(futureDate),
-		SetStartTime(time.Date(2000, 1, 1, 2, 0, 0, 0, time.UTC)),
+		SetStartDate(&futureDate),
+		SetStartTime(&startTime),
 	)
 	require.NoError(t, err)
 
@@ -426,8 +434,8 @@ func TestSchedule_PrecisionModes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts := []ScheduleOption{
-				SetStartTime(startTime),
-				SetEndTime(endTime),
+				SetStartTime(&startTime),
+				SetEndTime(&endTime),
 			}
 
 			if tt.precision {
@@ -587,10 +595,11 @@ func TestSchedule_WeekdayFiltering(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			startTime := time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)
 			schedule, err := New(
 				1,
 				Day,
-				SetStartTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
+				SetStartTime(&startTime),
 				SetAllowedWeekdays(
 					time.Monday,
 					time.Tuesday,
