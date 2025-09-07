@@ -2,7 +2,7 @@ package robfigcronschedule
 
 import "time"
 
-type scheduleOption func(*Schedule)
+type ScheduleOption func(*Schedule)
 
 // SetStartTime sets the daily start time for the schedule.
 // Combined with SetEndTime, this creates a daily time window.
@@ -10,7 +10,7 @@ type scheduleOption func(*Schedule)
 //
 // Example: SetStartTime(time.Date(0, 0, 0, 9, 0, 0, 0, time.UTC))
 // creates a start time of 9:00 AM.
-func SetStartTime(t time.Time) scheduleOption {
+func SetStartTime(t time.Time) ScheduleOption {
 	return func(s *Schedule) {
 		s.startTime = &t
 	}
@@ -19,7 +19,7 @@ func SetStartTime(t time.Time) scheduleOption {
 // SetEndTime sets the daily end time for the schedule.
 // Must be used with SetStartTime to be meaningful.
 // The schedule will not run after this time each day.
-func SetEndTime(t time.Time) scheduleOption {
+func SetEndTime(t time.Time) ScheduleOption {
 	return func(s *Schedule) {
 		s.endTime = &t
 	}
@@ -27,7 +27,7 @@ func SetEndTime(t time.Time) scheduleOption {
 
 // SetStartDate sets when the schedule should begin executing.
 // The schedule will not run before this date.
-func SetStartDate(t time.Time) scheduleOption {
+func SetStartDate(t time.Time) ScheduleOption {
 	return func(s *Schedule) {
 		s.startDate = &t
 	}
@@ -39,7 +39,7 @@ func SetStartDate(t time.Time) scheduleOption {
 // When combined with multi-day intervals (Week, Month, Year), this may produce
 // unexpected results as the schedule will skip to the next allowed day,
 // potentially disrupting the intended interval timing.
-func SetAllowedWeekdays(weekdays ...time.Weekday) scheduleOption {
+func SetAllowedWeekdays(weekdays ...time.Weekday) ScheduleOption {
 	return func(s *Schedule) {
 		allowed := make(map[time.Weekday]bool)
 		for _, day := range weekdays {
@@ -56,7 +56,7 @@ func SetAllowedWeekdays(weekdays ...time.Weekday) scheduleOption {
 //
 //	SetInterval(30) + SetIntervalTimeUnit(Minute) = every 30 minutes
 //	SetInterval(2) + SetIntervalTimeUnit(Hour) = every 2 hours
-func SetInterval(i int) scheduleOption {
+func SetInterval(i int) ScheduleOption {
 	return func(s *Schedule) {
 		s.interval = i
 	}
@@ -64,7 +64,7 @@ func SetInterval(i int) scheduleOption {
 
 // SetIntervalTimeUnit override the time unit for intervals.
 // Use one of: Second, Minute, Hour, Day, Week, Month, Year
-func SetIntervalTimeUnit(i IntervalTimeUnit) scheduleOption {
+func SetIntervalTimeUnit(i IntervalTimeUnit) ScheduleOption {
 	return func(s *Schedule) {
 		s.intervalTimeUnit = i
 	}
@@ -72,7 +72,7 @@ func SetIntervalTimeUnit(i IntervalTimeUnit) scheduleOption {
 
 // SetBeforeNextFunc sets a function to call before each Next() calculation.
 // Useful for logging, metrics, or state preparation.
-func SetBeforeNextFunc(f func(*Schedule)) scheduleOption {
+func SetBeforeNextFunc(f func(*Schedule)) ScheduleOption {
 	return func(s *Schedule) {
 		s.beforeNext = f
 	}
@@ -81,14 +81,14 @@ func SetBeforeNextFunc(f func(*Schedule)) scheduleOption {
 // SetAfterNextFunc sets a function to call after each Next() calculation.
 // The function receives a pointer to the calculated next run time.
 // Useful for logging, metrics, or result processing.
-func SetAfterNextFunc(f func(next *time.Time)) scheduleOption {
+func SetAfterNextFunc(f func(next *time.Time)) ScheduleOption {
 	return func(s *Schedule) {
 		s.afterNext = f
 	}
 }
 
 // Enable activates the schedule (default state).
-func Enable() scheduleOption {
+func Enable() ScheduleOption {
 	return func(s *Schedule) {
 		s.enabled = true
 	}
@@ -96,7 +96,7 @@ func Enable() scheduleOption {
 
 // Disable deactivates the schedule.
 // When disabled, Next() returns current time + 5 minutes for periodic re-checking.
-func Disable() scheduleOption {
+func Disable() ScheduleOption {
 	return func(s *Schedule) {
 		s.enabled = false
 	}
@@ -107,7 +107,7 @@ func Disable() scheduleOption {
 // - Intervals are calculated strictly from the current time
 // - If the next interval exceeds the daily time window, it moves to the next day
 // - Provides more predictable timing but may skip time slots
-func EnablePrecision() scheduleOption {
+func EnablePrecision() ScheduleOption {
 	return func(s *Schedule) {
 		s.precision = true
 	}
@@ -118,7 +118,7 @@ func EnablePrecision() scheduleOption {
 // - Intervals are calculated by rounding up from startTime
 // - Ensures no time slots are missed within the daily window
 // - May have slight timing variations
-func DisablePrecision() scheduleOption {
+func DisablePrecision() ScheduleOption {
 	return func(s *Schedule) {
 		s.precision = false
 	}

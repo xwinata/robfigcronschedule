@@ -8,7 +8,7 @@ package robfigcronschedule
 func New(
 	interval int,
 	intervalTimeUnit IntervalTimeUnit,
-	opts ...scheduleOption,
+	opts ...ScheduleOption,
 ) (*Schedule, error) {
 	schedule := Schedule{
 		interval:         interval,

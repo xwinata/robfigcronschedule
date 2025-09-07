@@ -13,7 +13,7 @@ func TestNew_BasicValidation(t *testing.T) {
 		name          string
 		interval      int
 		unit          IntervalTimeUnit
-		opts          []scheduleOption
+		opts          []ScheduleOption
 		expectError   error
 		expectEnabled bool
 	}{
@@ -39,7 +39,7 @@ func TestNew_BasicValidation(t *testing.T) {
 			name:     "invalid time window",
 			interval: 5,
 			unit:     Second,
-			opts: []scheduleOption{
+			opts: []ScheduleOption{
 				SetStartTime(time.Date(2000, 1, 1, 10, 0, 0, 0, time.UTC)),
 				SetEndTime(time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC)),
 			},
@@ -49,7 +49,7 @@ func TestNew_BasicValidation(t *testing.T) {
 			name:     "empty weekdays restriction",
 			interval: 5,
 			unit:     Second,
-			opts: []scheduleOption{
+			opts: []ScheduleOption{
 				SetAllowedWeekdays(), // empty
 			},
 			expectError: ErrNoDayInWeekdayWindow,
@@ -58,7 +58,7 @@ func TestNew_BasicValidation(t *testing.T) {
 			name:     "multi-week interval with weekday restriction",
 			interval: 2,
 			unit:     Week,
-			opts: []scheduleOption{
+			opts: []ScheduleOption{
 				SetAllowedWeekdays(time.Monday),
 			},
 			expectError: ErrMultiIntervalWithWeekdayWindow,
@@ -199,7 +199,7 @@ func TestSchedule_DatabaseConfigUpdate(t *testing.T) {
 			lastEnabled = mockDB.Enabled
 
 			// Apply updates if needed
-			var updates []scheduleOption
+			var updates []ScheduleOption
 			if mockDB.IntervalSeconds != s.interval {
 				updates = append(updates, SetInterval(mockDB.IntervalSeconds))
 			}
@@ -266,7 +266,7 @@ func TestSchedule_RedisConfigUpdate(t *testing.T) {
 			}
 
 			// Apply updates if needed
-			var updates []scheduleOption
+			var updates []ScheduleOption
 			if interval != s.interval {
 				updates = append(updates, SetInterval(interval))
 			}
@@ -425,7 +425,7 @@ func TestSchedule_PrecisionModes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := []scheduleOption{
+			opts := []ScheduleOption{
 				SetStartTime(startTime),
 				SetEndTime(endTime),
 			}

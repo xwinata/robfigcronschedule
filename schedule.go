@@ -73,7 +73,7 @@ type Schedule struct {
 //	if err != nil {
 //	    // Schedule unchanged, handle error
 //	}
-func (s *Schedule) Set(opts ...scheduleOption) error {
+func (s *Schedule) Set(opts ...ScheduleOption) error {
 	// validate using temp var
 	temp := &Schedule{
 		enabled:          s.enabled,
