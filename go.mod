@@ -1,4 +1,4 @@
-module robfigcronschedule
+module github.com/xwinata/robfigcronschedule
 
 go 1.21.13
 
