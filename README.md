@@ -441,6 +441,7 @@ func New(interval int, intervalTimeUnit IntervalTimeUnit, opts ...scheduleOption
 func SetStartTime(t time.Time) scheduleOption
 func SetEndTime(t time.Time) scheduleOption  
 func SetStartDate(t time.Time) scheduleOption
+func SetNextRun(t time.Time) scheduleOption
 func SetAllowedWeekdays(weekdays ...time.Weekday) scheduleOption
 func SetBeforeNextFunc(f func()) scheduleOption
 func SetAfterNextFunc(f func(next *time.Time)) scheduleOption

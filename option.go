@@ -64,6 +64,25 @@ func SetStartDate(t *time.Time) ScheduleOption {
 	}
 }
 
+// SetNextRun sets the specific next execution time for the schedule.
+// This overrides the normal interval calculation for the next run only.
+// After this scheduled run, the schedule returns to normal interval-based timing.
+// Pass nil to reset and use normal interval calculation.
+//
+// Examples:
+//
+//	// Set next run to specific time:
+//	nextRun := time.Date(2024, 12, 25, 14, 30, 0, 0, time.UTC)
+//	SetNextRun(&nextRun)
+//
+//	// Reset to use normal interval calculation:
+//	SetNextRun(nil)
+func SetNextRun(t *time.Time) ScheduleOption {
+	return func(s *Schedule) {
+		s.setNextRun(t)
+	}
+}
+
 // SetAllowedWeekdays restricts the schedule to run only on specified weekdays.
 // If not set or if no weekdays are provided, the schedule can run on any day.
 //
