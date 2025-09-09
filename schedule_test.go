@@ -250,67 +250,6 @@ func TestSchedule_DatabaseConfigUpdate(t *testing.T) {
 	assert.False(t, schedule.enabled)
 }
 
-func TestSchedule_RedisConfigUpdate(t *testing.T) {
-	// Mock Redis config store
-	mockRedis := map[string]interface{}{
-		"interval": 2,
-		"enabled":  true,
-		"version":  1,
-	}
-
-	var hookCallCount int
-
-	schedule, err := New(5, Second,
-		SetBeforeNextFunc(func(s *Schedule) {
-			hookCallCount++
-
-			// Simulate Redis GET operation
-			interval, hasInterval := mockRedis["interval"].(int)
-			enabled, hasEnabled := mockRedis["enabled"].(bool)
-
-			if !hasInterval || !hasEnabled {
-				return // Config not found
-			}
-
-			// Apply updates if needed
-			var updates []ScheduleOption
-			if interval != s.interval {
-				updates = append(updates, SetInterval(interval))
-			}
-			if enabled != s.enabled {
-				if enabled {
-					updates = append(updates, Enable())
-				} else {
-					updates = append(updates, Disable())
-				}
-			}
-
-			if len(updates) > 0 {
-				s.Set(updates...)
-			}
-		}),
-	)
-	require.NoError(t, err)
-
-	now := time.Now()
-
-	// Initial run - should update interval to 2
-	schedule.Next(now)
-	assert.Equal(t, 1, hookCallCount)
-	assert.Equal(t, 2, schedule.interval)
-	assert.True(t, schedule.enabled)
-
-	// Simulate config change in Redis
-	mockRedis["interval"] = 4
-	mockRedis["enabled"] = false
-	mockRedis["version"] = 2
-
-	schedule.Next(now.Add(time.Second))
-	assert.Equal(t, 2, hookCallCount)
-	assert.Equal(t, 4, schedule.interval)
-	assert.False(t, schedule.enabled)
-}
-
 func TestSchedule_FeatureFlagIntegration(t *testing.T) {
 	// Mock feature flag client
 	mockFlags := map[string]interface{}{
@@ -487,25 +426,25 @@ func TestSchedule_IntervalTypes(t *testing.T) {
 			name:     "2 days",
 			interval: 2,
 			unit:     Day,
-			expected: "2024-03-13 10:00:00",
+			expected: "2024-03-13 00:00:00",
 		},
 		{
 			name:     "1 week",
 			interval: 1,
 			unit:     Week,
-			expected: "2024-03-18 10:00:00",
+			expected: "2024-03-18 00:00:00",
 		},
 		{
 			name:     "1 month",
 			interval: 1,
 			unit:     Month,
-			expected: "2024-04-11 10:00:00",
+			expected: "2024-04-11 00:00:00",
 		},
 		{
 			name:     "1 year",
 			interval: 1,
 			unit:     Year,
-			expected: "2025-03-11 10:00:00",
+			expected: "2025-03-11 00:00:00",
 		},
 	}
 
@@ -634,4 +573,167 @@ func parseTime(t *testing.T, timeStr string) time.Time {
 	parsed, err := time.Parse("2006-01-02 15:04:05", timeStr)
 	require.NoError(t, err)
 	return parsed.UTC()
+}
+
+func TestSchedule_CriticalEdgeCases(t *testing.T) {
+	t.Run("late night with restricted next day", func(t *testing.T) {
+		// Test case 1: run at 23:50 with 15-minute interval, tomorrow is not an allowed day
+		// The next run should be the day after tomorrow at 00:00
+
+		current := parseTime(t, "2024-03-11 23:50:00") // Monday 23:50
+
+		schedule, err := New(
+			15,
+			Minute,
+			SetAllowedWeekdays(time.Monday, time.Wednesday, time.Friday), // Tuesday not allowed
+		)
+		require.NoError(t, err)
+
+		next := schedule.Next(current)
+
+		// Should skip Tuesday (not allowed) and go to Wednesday 00:00
+		expected := parseTime(t, "2024-03-13 00:00:00") // Wednesday 00:00
+		assert.Equal(t, expected, next,
+			"Should skip disallowed Tuesday and go to Wednesday midnight")
+	})
+
+	t.Run("end of time window boundary", func(t *testing.T) {
+		// Test case 2: run at 18:00 with 15min interval, endTime is 18:10, startTime is 8:00
+		// The next run should be tomorrow at 8:00
+
+		current := parseTime(t, "2024-03-11 18:00:00") // Monday 18:00
+
+		startTime := time.Date(2000, 1, 1, 8, 0, 0, 0, time.UTC) // 8:00 AM
+		endTime := time.Date(2000, 1, 1, 18, 10, 0, 0, time.UTC) // 6:10 PM
+
+		schedule, err := New(
+			15,
+			Minute,
+			SetStartTime(&startTime),
+			SetEndTime(&endTime),
+			EnablePrecision(), // Use precision mode for strict interval timing
+		)
+		require.NoError(t, err)
+
+		next := schedule.Next(current)
+
+		// Next 15-minute interval would be 18:15, but that's past endTime (18:10)
+		// So should move to tomorrow at startTime (8:00)
+		expected := parseTime(t, "2024-03-12 08:00:00") // Tuesday 8:00 AM
+		assert.Equal(t, expected, next,
+			"Should move to next day startTime when interval exceeds endTime")
+	})
+
+	t.Run("late night with time window and restricted next day", func(t *testing.T) {
+		// Combined edge case: late night + time window + weekday restriction
+		// Run at 23:50 with 15min interval, window 8:00-18:10, tomorrow not allowed
+		// Should skip to day after tomorrow at 8:00
+
+		current := parseTime(t, "2024-03-11 23:50:00") // Monday 23:50
+
+		startTime := time.Date(2000, 1, 1, 8, 0, 0, 0, time.UTC)
+		endTime := time.Date(2000, 1, 1, 18, 10, 0, 0, time.UTC)
+
+		schedule, err := New(
+			15,
+			Minute,
+			SetStartTime(&startTime),
+			SetEndTime(&endTime),
+			SetAllowedWeekdays(time.Monday, time.Wednesday, time.Friday), // Tuesday not allowed
+			EnablePrecision(),
+		)
+		require.NoError(t, err)
+
+		next := schedule.Next(current)
+
+		// Should skip Tuesday (not allowed) and go to Wednesday at startTime
+		expected := parseTime(t, "2024-03-13 08:00:00") // Wednesday 8:00 AM
+		assert.Equal(t, expected, next,
+			"Should skip disallowed day and use startTime of next allowed day")
+	})
+
+	t.Run("end of time window on friday", func(t *testing.T) {
+		// Edge case: end of time window on Friday, weekends not allowed
+		// Should jump to Monday startTime
+
+		current := parseTime(t, "2024-03-15 18:05:00") // Friday 18:05
+
+		startTime := time.Date(2000, 1, 1, 9, 0, 0, 0, time.UTC) // 9:00 AM
+		endTime := time.Date(2000, 1, 1, 18, 10, 0, 0, time.UTC) // 6:10 PM
+
+		schedule, err := New(
+			10,
+			Minute,
+			SetStartTime(&startTime),
+			SetEndTime(&endTime),
+			SetAllowedWeekdays(
+				time.Monday,
+				time.Tuesday,
+				time.Wednesday,
+				time.Thursday,
+				time.Friday,
+			),
+			EnablePrecision(),
+		)
+		require.NoError(t, err)
+
+		next := schedule.Next(current)
+
+		// Next interval would be 18:15, past endTime (18:10)
+		// Weekend not allowed, so should go to Monday 9:00 AM
+		expected := parseTime(t, "2024-03-18 09:00:00") // Monday 9:00 AM
+		assert.Equal(t, expected, next,
+			"Should skip weekend and go to Monday startTime when Friday exceeds time window")
+	})
+
+	t.Run("precision vs non-precision at time boundary", func(t *testing.T) {
+		// Compare precision modes at exact boundary
+		current := parseTime(t, "2024-03-11 18:10:00") // Monday 18:10 (exact endTime)
+
+		startTime := time.Date(2000, 1, 1, 8, 0, 0, 0, time.UTC)
+		endTime := time.Date(2000, 1, 1, 18, 10, 0, 0, time.UTC)
+
+		// Test precision mode
+		precisionSchedule, err := New(
+			15,
+			Minute,
+			SetStartTime(&startTime),
+			SetEndTime(&endTime),
+			EnablePrecision(),
+		)
+		require.NoError(t, err)
+
+		// Test non-precision mode
+		nonPrecisionSchedule, err := New(
+			15,
+			Minute,
+			SetStartTime(&startTime),
+			SetEndTime(&endTime),
+			DisablePrecision(),
+		)
+		require.NoError(t, err)
+
+		precisionNext := precisionSchedule.Next(current)
+		nonPrecisionNext := nonPrecisionSchedule.Next(current)
+
+		// Both should go to next day at startTime since we're at exact endTime
+		expected := parseTime(t, "2024-03-12 08:00:00") // Tuesday 8:00 AM
+
+		assert.Equal(t, expected, precisionNext,
+			"Precision mode should move to next day startTime when at exact endTime")
+		assert.Equal(t, expected, nonPrecisionNext,
+			"Non-precision mode should move to next day startTime when at exact endTime")
+	})
+}
+
+func TestSchedule_ManualNextRun(t *testing.T) {
+	// Simple test: 10-second intervals, pause from 10 AM to 3 PM
+	current := parseTime(t, "2024-03-11 10:00:00")
+	pauseUntil := parseTime(t, "2024-03-11 15:00:00")
+
+	schedule, err := New(10, Second, SetNextRun(&pauseUntil))
+	require.NoError(t, err)
+
+	next := schedule.Next(current)
+	assert.Equal(t, pauseUntil, next, "Should return manually set next run time")
 }

@@ -130,11 +130,12 @@ func (s *Schedule) Set(opts ...ScheduleOption) error {
 //  4. If startDate is set and t is before it:
 //     - Return startDate + startTime if both set
 //     - Otherwise return startDate
-//  5. If startTime is set (daily time window):
-//     - Precision mode: strict intervals within window, next day if overflow
-//     - Non-precision mode: round up from startTime using intervals
-//  6. Otherwise: calculate next run using intervals from current time
-//  7. Execute after-hook and cache result
+//  5. If today is not allowed, find the next allowed day.
+//  6. If startTime is set (daily time window):
+//     a. Precision mode: strict intervals within window, next day if overflow
+//     b. Non-precision mode: round up from startTime using intervals
+//  7. Otherwise: calculate next run using intervals from current time
+//  8. Execute after-hook and cache result
 //
 // Time zones are handled by converting all times to t's location.
 func (s *Schedule) Next(t time.Time) time.Time {
@@ -152,7 +153,7 @@ func (s *Schedule) Next(t time.Time) time.Time {
 	}
 
 	var next time.Time
-	//  7. Run post-hook.
+	//  8. Run post-hook.
 	defer s.safeAfterNext(s.afterNext, &next)
 
 	//  4. If StartDate is set and t is before it:
@@ -161,72 +162,39 @@ func (s *Schedule) Next(t time.Time) time.Time {
 	if s.startDate != nil && t.Before(*s.startDate) {
 		next = s.startDate.In(t.Location())
 		if s.startTime != nil {
-			localization := s.startTime.In(t.Location())
-			next = time.Date(
-				next.Year(),
-				next.Month(),
-				next.Day(),
-				localization.Hour(),
-				localization.Minute(),
-				localization.Second(),
-				localization.Nanosecond(),
-				t.Location(),
-			)
-
-			return next
+			return combineDayAndTime(next, s.startTime.In(next.Location()))
 		}
 		return next
 	}
 
-	//  5. If StartTime is set (time-of-day window):
-	//     - If t is before today's STime, return today's STime.
-	//     - If t is after today's ETime (or default 23:59:59), return tomorrow's STime.
-	if s.startTime != nil {
-		lStartTime := s.startTime.In(t.Location())
+	// 5. Check if today is an allowed day
+	if !s.isDayAllowed(t) {
+		// Skip to next allowed day at the start time of next 24 hour
+		next = s.findNextAllowedDay(t.Add(24 * time.Hour))
+		return next
+	}
 
-		startTime := time.Date(
-			t.Year(),
-			t.Month(),
-			t.Day(),
-			lStartTime.Hour(),
-			lStartTime.Minute(),
-			lStartTime.Second(),
-			lStartTime.Nanosecond(),
-			t.Location(),
-		)
+	//  6. If StartTime is set (time-of-day window):
+	//     a. If t is before today's STime, return today's STime.
+	//     b. If t is after today's ETime (or default 23:59:59), return tomorrow's STime.
+	if s.startTime != nil {
+		startTime := combineDayAndTime(t, s.startTime.In(t.Location()))
 
 		var endTime time.Time
 		if s.endTime != nil {
-			lEndTime := s.endTime.In(t.Location())
-			endTime = time.Date(
-				t.Year(),
-				t.Month(),
-				t.Day(),
-				lEndTime.Hour(),
-				lEndTime.Minute(),
-				lEndTime.Second(),
-				lEndTime.Nanosecond(),
-				t.Location(),
-			)
+			endTime = combineDayAndTime(t, s.endTime.In(t.Location()))
 		} else {
 			endTime = time.Date(t.Year(), t.Month(), t.Day(), 23, 59, 59, 999999999, t.Location())
 		}
 
-		// Check if today is an allowed day
-		if !s.isDayAllowed(t) {
-			// Skip to next allowed day at start time
-			next = s.findNextAllowedDay(startTime.Add(24*time.Hour), true)
-			return next
-		}
-
 		if s.precision {
 			// use the earliest stime
-			if t.Before(startTime) {
+			if t.Before(startTime) { // 6a
 				next = startTime
-			} else {
+			} else { // 6b
 				next = s.incrementInterval(t)
 			}
-		} else { // 6b. Otherwise, rounding next run based on the Interval and ItvUnit
+		} else { // 7. Otherwise, rounding next run based on the Interval and ItvUnit
 			next = startTime
 			for next.Before(t) {
 				next = s.incrementInterval(next)
@@ -235,27 +203,34 @@ func (s *Schedule) Next(t time.Time) time.Time {
 
 		// Past end time, move to next allowed day
 		if next.Day() != t.Day() { // increment moved time to different day
-			next = s.findNextAllowedDay(next, true)
+			next = s.findNextAllowedDay(next)
 		} else if next.After(endTime) {
-			next = s.findNextAllowedDay(startTime.Add(24*time.Hour), true)
+			next = s.findNextAllowedDay(startTime.Add(24 * time.Hour))
 		}
 
 		return next
 	}
 
-	//  6a. Otherwise, compute the next run based on Interval and ItvUnit
+	//  7. Otherwise, compute the next run based on Interval and ItvUnit
 	//     (seconds, minutes, hours, days, weeks, months, years).
 	//     If no valid unit is provided, default to 5 minutes.
 	next = s.incrementInterval(t)
 
 	// Apply weekday filtering if the day changed
 	if next.Day() != t.Day() || next.Month() != t.Month() || next.Year() != t.Year() {
-		next = s.findNextAllowedDay(next, false)
+		next = s.findNextAllowedDay(next)
 	}
 
 	return next
 }
 
+// incrementInterval calculates the next time by adding the configured interval
+// to the given time t. The calculation method depends on the intervalTimeUnit:
+// - Second/Minute/Hour: adds duration using time.Add()
+// - Day/Week: adds calendar days using time.AddDate()
+// - Month/Year: adds calendar months/years using time.AddDate()
+//
+// For invalid intervalTimeUnit values, defaults to adding 5 minutes.
 func (s *Schedule) incrementInterval(t time.Time) time.Time {
 	switch s.intervalTimeUnit {
 	case Second:
@@ -277,10 +252,19 @@ func (s *Schedule) incrementInterval(t time.Time) time.Time {
 	}
 }
 
+// setNextRun caches the calculated next run time for efficiency.
+// This cached value is returned by Next() if it's still in the future,
+// avoiding recalculation on subsequent calls with the same or earlier time.
 func (s *Schedule) setNextRun(nextRun *time.Time) {
-	s.nextRun = *nextRun
+	if nextRun == nil {
+		s.nextRun = time.Time{}
+	} else {
+		s.nextRun = *nextRun
+	}
 }
 
+// validate checks the schedule configuration for errors and returns
+// appropriate error messages. Called during New() and Set() operations.
 func validate(s *Schedule) error {
 	if s.interval < 1 {
 		return ErrInvalidInterval
@@ -294,7 +278,10 @@ func validate(s *Schedule) error {
 		}
 	}
 
-	if s.allowedWeekdays != nil && len(*s.allowedWeekdays) > 0 { // If using week-based or longer intervals with weekday restrictions, warn about potential issues
+	if s.allowedWeekdays != nil &&
+		len(
+			*s.allowedWeekdays,
+		) > 0 { // If using week-based or longer intervals with weekday restrictions, warn about potential issues
 		if s.intervalTimeUnit == Week || s.intervalTimeUnit == Month || s.intervalTimeUnit == Year {
 			return ErrMultiIntervalWithWeekdayWindow
 		}
@@ -303,7 +290,9 @@ func validate(s *Schedule) error {
 	return nil
 }
 
-// Check if today is an allowed day
+// isDayAllowed checks if the given time falls on an allowed weekday.
+// Returns true if no weekday restrictions are set (allowedWeekdays is nil)
+// or if the day matches one of the allowed weekdays.
 func (s *Schedule) isDayAllowed(t time.Time) bool {
 	if s.allowedWeekdays == nil {
 		return true
@@ -312,49 +301,40 @@ func (s *Schedule) isDayAllowed(t time.Time) bool {
 	return (*s.allowedWeekdays)[t.Weekday()]
 }
 
-// findNextAllowedDay finds the next day that matches the weekday criteria
-// If preserveTime is true, it keeps the time-of-day; otherwise it may adjust it
-func (s *Schedule) findNextAllowedDay(start time.Time, preserveTime bool) time.Time {
-	// If no weekday restrictions, return as-is
-	if s.allowedWeekdays == nil {
-		return start
-	}
-
+// findNextAllowedDay finds the next date that satisfies weekday restrictions.
+// Starts from the given time and checks up to 14 days ahead to find an allowed day.
+// If startTime is configured, returns the allowed day at startTime, otherwise at midnight.
+//
+// Returns the original start time as fallback if no allowed day found (should not happen).
+func (s *Schedule) findNextAllowedDay(start time.Time) time.Time {
 	current := start
 
 	// Safety limit to prevent infinite loops (check up to 14 days)
 	for i := 0; i < 14; i++ {
 		if s.isDayAllowed(current) {
-			// If we want to preserve the original time and we have start/end times
-			if preserveTime && s.startTime != nil {
-				lStartTime := s.startTime.In(current.Location())
-				return time.Date(
-					current.Year(),
-					current.Month(),
-					current.Day(),
-					lStartTime.Hour(),
-					lStartTime.Minute(),
-					lStartTime.Second(),
-					lStartTime.Nanosecond(),
-					current.Location(),
-				)
+			// If we have start/end times
+			if s.startTime != nil {
+				return combineDayAndTime(current, s.startTime.In(current.Location()))
 			}
-			return current
+			// else return midnight
+			return time.Date(
+				current.Year(),
+				current.Month(),
+				current.Day(),
+				0,
+				0,
+				0,
+				0,
+				current.Location(),
+			)
 		}
 
 		// Move to next day
-		if preserveTime && s.startTime != nil {
-			lStartTime := s.startTime.In(current.Location())
+		if s.startTime != nil {
 			// Jump to start time of next day
-			current = time.Date(
-				current.Year(),
-				current.Month(),
-				current.Day()+1,
-				lStartTime.Hour(),
-				lStartTime.Minute(),
-				lStartTime.Second(),
-				lStartTime.Nanosecond(),
-				current.Location(),
+			current = combineDayAndTime(
+				current.Add(24*time.Hour),
+				s.startTime.In(current.Location()),
 			)
 		} else {
 			current = current.Add(24 * time.Hour)
@@ -366,7 +346,9 @@ func (s *Schedule) findNextAllowedDay(start time.Time, preserveTime bool) time.T
 	return start
 }
 
-// Handles beforeNext() panics
+// safeBeforeNext executes the beforeNext hook function with panic recovery.
+// If the hook panics, logs the error and continues execution.
+// This ensures that hook failures don't break the scheduling logic.
 func (s *Schedule) safeBeforeNext(beforeNext func(*Schedule)) {
 	if beforeNext == nil {
 		return
@@ -380,7 +362,9 @@ func (s *Schedule) safeBeforeNext(beforeNext func(*Schedule)) {
 	beforeNext(s)
 }
 
-// Handles afterNext() panics
+// safeAfterNext executes the afterNext hook function with panic recovery
+// and ensures the nextRun cache is updated regardless of hook success/failure.
+// The nextRun cache update happens in a defer to guarantee execution.
 func (s *Schedule) safeAfterNext(afterNext func(*time.Time), nextRun *time.Time) {
 	defer s.setNextRun(nextRun)
 	if afterNext == nil {
@@ -393,4 +377,23 @@ func (s *Schedule) safeAfterNext(afterNext func(*time.Time), nextRun *time.Time)
 		}
 	}()
 	afterNext(nextRun)
+}
+
+// combineDayAndTime combines date components from 'day' with time components from 't'.
+// Useful for applying a specific time-of-day to a different date while preserving
+// the target date's timezone location.
+//
+// Example: day=2024-03-15 10:00:00 UTC, t=2000-01-01 14:30:00 UTC
+// Result: 2024-03-15 14:30:00 UTC
+func combineDayAndTime(day time.Time, t time.Time) time.Time {
+	return time.Date(
+		day.Year(),
+		day.Month(),
+		day.Day(),
+		t.Hour(),
+		t.Minute(),
+		t.Second(),
+		t.Nanosecond(),
+		day.Location(),
+	)
 }
