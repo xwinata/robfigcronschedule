@@ -223,35 +223,24 @@ func (s *Schedule) Next(t time.Time) time.Time {
 			// use the earliest stime
 			if t.Before(startTime) {
 				next = startTime
-				return next
+			} else {
+				next = s.incrementInterval(t)
 			}
-
-			// if current time is past the allowed endTime, use the earliest tomorrow startTime
-			if t.After(endTime) {
-				next = startTime.Add(24 * time.Hour)
-				return next
-			}
-
-			// Within window - compute next interval but check bounds
-			next = s.incrementInterval(t)
-			if next.After(endTime) {
-				// Past end time, move to next allowed day
-				next = s.findNextAllowedDay(startTime.Add(24*time.Hour), true)
-			}
-			return next
 		} else { // 6b. Otherwise, rounding next run based on the Interval and ItvUnit
 			next = startTime
 			for next.Before(t) {
 				next = s.incrementInterval(next)
 			}
-
-			// If we've moved to a different day, check if it's allowed
-			if next.Day() != t.Day() {
-				next = s.findNextAllowedDay(next, true)
-			}
-
-			return next
 		}
+
+		// Past end time, move to next allowed day
+		if next.Day() != t.Day() { // increment moved time to different day
+			next = s.findNextAllowedDay(next, true)
+		} else if next.After(endTime) {
+			next = s.findNextAllowedDay(startTime.Add(24*time.Hour), true)
+		}
+
+		return next
 	}
 
 	//  6a. Otherwise, compute the next run based on Interval and ItvUnit
