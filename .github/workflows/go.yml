@@ -1,6 +1,3 @@
-# This workflow will build a golang project
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-go
-
 name: Go
 
 on:
@@ -10,37 +7,78 @@ on:
     branches: [ "main" ]
 
 jobs:
-
-  build:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-go@v5
-      with:
-        go-version-file: go.mod 
+      - name: Checkout code
+        uses: actions/checkout@v6
 
-  # ---- Lint (golangci-lint) ----
-    - name: Run golangci-lint
-      uses: golangci/golangci-lint-action@v6
-      with:
-        version: latest
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
 
-    # ---- Format check (golines) ----
-    - name: Install golines
-      run: go install github.com/segmentio/golines@latest
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.4.0
+          args: --timeout=5m
 
-    - name: Run golines check
-      run: |
-        golines -m 100 --base-formatter gofmt *.go
-        git diff --exit-code || (echo "❌ Code is not formatted with golines" && exit 1)
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version-file:
+          - go.mod
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
 
-    - name: Test coverages
-      run: go test ./... -coverprofile=coverage.out -coverpkg=./...
-  
-    - name: Check test coverage
-      uses: vladopajic/go-test-coverage@v2
-      with:
-        profile: coverage.out
-        threshold-total: 70
-        git-token: ${{ github.ref_name == 'main' && secrets.GITHUB_TOKEN || '' }}
-        git-branch: badges 
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Cache Go modules
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ matrix.go-version }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ matrix.go-version }}-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+          
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+    
+      - name: Generate coverage badge
+        uses: vladopajic/go-test-coverage@v2
+        with:
+          profile: coverage.out
+          threshold-total: 70
+          git-token: ${{ secrets.GITHUB_TOKEN }}
+          git-branch: badges 
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Build
+        run: go build -v ./...
